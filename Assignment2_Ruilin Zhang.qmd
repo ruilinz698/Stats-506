@@ -1,0 +1,237 @@
+---
+title: "Assignment 2"
+author: "Ruilin Zhang"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+Github： <https://github.com/ruilinz698/Stats-506/blob/main/Assignment2_Ruilin%20Zhang.qmd>
+
+## Problem 1 - Dice game
+
+```{r}
+# Version 1: Implement this game using a loop.
+play_dice_1 <- function(n){
+  cost <- 2 * n
+  total_winnings <- 0
+  # Simulate a dice roll in a for loop
+  for (i in 1:n){
+    roll <- sample(1:6,1,replace = TRUE)
+    # If the roll is 3 or 5 you win twice the roll
+    if (roll == 3 | roll == 5){
+      total_winnings = total_winnings + 2 * roll
+    }
+    # Else you lose
+    else{
+      total_winnings = total_winnings
+    }}
+  # Calculate the total winnings and return the value
+  total_winnings = total_winnings - cost
+  return(total_winnings)
+}
+```
+
+```{r}
+# Version 2: Implement this game using built-in R vectorized functions.
+play_dice_2 <- function(n){
+  cost <- 2 * n
+  roll <- sample(1:6,n,replace = TRUE)
+  # Count the number of roll when its outcome is 3 or 5 and calculate the total winnings
+  total_winnings <- sum(roll == 3) * 3 * 2 + sum(roll == 5) *5 * 2 - cost
+  return(total_winnings)
+}
+```
+
+```{r}
+# Version 3: Implement this by rolling all the dice into one and collapsing the die rolls into a single table().
+play_dice_3 <- function(n) {
+  cost <- 2 * n
+  roll <- sample(1:6, n, replace = TRUE)
+  # Collapsing the die rolls into a table
+  roll_table <- table(roll)
+  # Calculate the total winnings
+  winnings_1 <- ifelse("3" %in% names(roll_table), roll_table["3"] * 3 * 2, 0)
+  winnings_2 <- ifelse("5" %in% names(roll_table), roll_table["5"] * 5 * 2, 0)
+  total_winnings <- winnings_1 + winnings_2 - cost
+  return(total_winnings)
+}
+```
+
+```{r}
+# Version 4: Implement this game by using one of the “apply” functions.
+play_dice_4 <- function(n) {
+  cost <- 2 * n
+  roll <- sample(1:6, n, replace = TRUE)
+  
+  # Use sapply to check each roll and calculate the corresponding winnings
+  winnings <- sapply(roll, function(x) {
+    if (x == 3 || x == 5) {
+      return(2 * x)
+    } else {
+      return(0) 
+    }
+  })
+  # Calculate total winnings
+  total_winnings <- sum(winnings) - cost
+  return(total_winnings)
+}
+```
+
+```{r}
+# Run the functions with input 3 
+play_dice_1(3)
+play_dice_2(3)
+play_dice_3(3)
+play_dice_4(3)
+```
+
+```{r}
+# Run the function with input 3000
+play_dice_1(3000)
+play_dice_2(3000)
+play_dice_3(3000)
+play_dice_4(3000)
+```
+
+```{r}
+# Set the seed and control the randomization with input 3
+set.seed(42)
+play_dice_1(3)
+set.seed(42)
+play_dice_2(3)
+set.seed(42)
+play_dice_3(3)
+set.seed(42)
+play_dice_4(3)
+```
+
+```{r}
+# Set the seed and control the randomization with input 3000
+set.seed(42)
+play_dice_1(3000)
+set.seed(42)
+play_dice_2(3000)
+set.seed(42)
+play_dice_3(3000)
+set.seed(42)
+play_dice_4(3000)
+```
+
+```{r}
+library(microbenchmark)
+n_1 = 1000
+microbenchmark(
+  play_dice_1(n_1),
+  play_dice_2(n_1),
+  play_dice_3(n_1),
+  play_dice_4(n_1)
+)
+```
+
+```{r}
+n_2 = 100000
+microbenchmark(
+  play_dice_1(n_2),
+  play_dice_2(n_2),
+  play_dice_3(n_2),
+  play_dice_4(n_2)
+)
+```
+
+According to the results, we can conclude the rank of efficiency, Version2\>Version3\>Version4\>Version1
+
+vectorization means a function can be called on a vector and operate on each element, rather than requiring a loop across elements. So vectorization is the fastest and a for loop is the lowest. Table() function can also run efficiently, because it can count the frequency at a time. Sapply needs to run the function for each element in roll, so it runs more slowly. In conclusion, we can optimize the code efficiency by using vectorization as much as possible, which can improve the efficiency greatly.
+
+```{r}
+simulation <- function(n_simulations, n_rolls){
+  total_winning <- 0
+  for (i in 1:n_simulations){
+    total_winning <- total_winning + play_dice_2(n_rolls)
+  }
+  expected_winning <- total_winning/n_simulations
+  return(expected_winning)
+}
+
+simulation(1000000,10)
+```
+
+According to the Monte Carlo simulation, the expected value of total winning for each dice game with 10 rolls is positive, so the game is not fair and it favors the player.
+
+## Problem 2 - Linear Regression
+
+```{r}
+data <- read.csv("/Users/aa/Desktop/Umich/Stats 506/cars.csv")
+colnames(data) <- c('Height','Width','Length','Driveline','Engine_Type','isHybrid','Forward_Gear_Number','Transmission','City_mpg','Fuel_Type','Highway_mpg','Classification','ID','Maker','Model_Year','Year','Horsepower','Torque')
+```
+
+```{r}
+data_1 <- data[data$Fuel_Type == 'Gasoline',]
+```
+
+```{r}
+# Visualize the distribution of highway gas mileage
+hist(data_1$Highway_mpg,breaks = 30)
+```
+
+```{r}
+# Calculate the skewness of highway gas mileage
+library(moments)
+print(skewness(data_1$Highway_mpg))
+```
+
+According to the plot and the skewness, the data has a positive skewness, so we need to conduct a natural log transformation.
+
+```{r}
+# Conduct log transformation for highway gas mileage data
+data_1$Highway_mpg = log(data_1$Highway_mpg)
+```
+
+```{r}
+# Convert the year to categorical variable
+data_1$Year <- as.factor(data_1$Year)
+
+# Fit the linear regression model
+mod1 <- lm(Highway_mpg ~ Torque + Horsepower + Height + Width + Length + Year,data = data_1 )
+
+summary(mod1)
+```
+
+The estimated coefficient for **Torque** is **-0.0023**, which means that for **every unit increase in Torque**, the **highway MPG** is expected to decrease by approximately **0.23%**, holding **all other variables constant**.
+
+```{r}
+# Fit a new linear regression model by introducing the interaction of Torque and Horsepower
+mod2 <- lm(Highway_mpg ~ Torque * Horsepower + Height + Width + Length + Year,data = data_1 )
+
+summary(mod2)
+```
+
+```{r}
+library(interactions)
+
+# Generate an interaction plot of 3 different Horsepower values and Years.
+interact_plot(mod2, pred = Torque, modx = Horsepower, 
+             modx.values = c(106,138,300))
+```
+
+```{r}
+# Generate an interaction plot of 3 different Horsepower values and Years.
+interact_plot(mod2, pred = Torque, modx = Horsepower, 
+              modx.values = c(106,200,300), 
+              at = list(Year = '2012'))
+```
+
+According to mod2, the coefficient of Torque is -0.086\<0, and the coefficient of Torque \* Horsepower is 0.00011\>0, We choose three Horsepower values 106, 200, 300 and we can see that as Horsepower increases, the slope increases, which means a more gentle straight line. Also, we choose the data in 2012 to draw the plot and the coefficient is 1.197\>0, so the slopes of the second plot is bigger than those in the first plot, which means they are more gentle in the second plot.
+
+```{r}
+# Generate the proper design matrix
+X = model.matrix(mod1, data = data_1)
+# Solve the coefficients of the model by manually calculation
+Beta = solve(t(X) %*% X) %*% t(X) %*% data_1$Highway_mpg
+# Print out the output and compare the outcomes from two approaches
+print(Beta)
+print(coef(mod1))
+```
+
+After comparing coefficients calculated by lm() and matrix algebra, we can find that they can get exactly the same results.
