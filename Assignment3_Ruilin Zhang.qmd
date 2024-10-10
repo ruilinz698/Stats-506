@@ -1,0 +1,290 @@
+---
+title: "Assignment 2"
+author: "Ruilin Zhang"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## Problem 1 - Vision
+
+```{r}
+library('haven')
+
+# import data and merge them
+data_1 <- read_xpt('/Users/aa/Desktop/Umich/Stats 506/VIX_D.XPT')
+data_2 <- read_xpt('/Users/aa/Desktop/Umich/Stats 506/DEMO_D.XPT')
+data <- merge(data_1, data_2, by = 'SEQN', all = FALSE)
+
+# Print out the sample size
+print(dim(data)[1])
+
+
+```
+
+```{r}
+
+library(dplyr)
+library(knitr)
+
+# Split age within each 10-year age bracket and group by this bracket
+data$age <- cut(data$RIDAGEYR, breaks = seq(0, 150, by = 10), right = FALSE, include.lowest = TRUE)
+data_grouped <- group_by(data, age)
+
+# Calculate the proportion of the number of people wearing glasses in distance in different age brackets
+results <- summarise(
+  data_grouped,
+  respondents_num = n(),
+  wear_glasses = sum(VIQ220 == 1, na.rm = TRUE), # not data$VIQ220 == 1
+  proportion = wear_glasses / respondents_num
+)
+
+# Make a nice table of the result
+kable(results)
+```
+
+```{r}
+# Variable names: VIQ220, RIDAGEYR, RIAGENDR, RIDRETH1, INDFMPIR
+
+# Remove the value of 9 and turn VIQ220 = 2 into 0
+data_fit <- data[data$VIQ220 == 1 | data$VIQ220 == 2,]
+data_fit$VIQ220 <- ifelse(data_fit$VIQ220 == 1, 1, 0)
+
+# Fit the logistics model
+mod1 <- glm(VIQ220 ~ RIDAGEYR, family = binomial, data = data_fit)
+mod2 <- glm(VIQ220 ~ RIDAGEYR + RIAGENDR + RIDRETH1, family = binomial, data = data_fit)
+mod3 <- glm(VIQ220 ~ RIDAGEYR + RIAGENDR + RIDRETH1 + INDFMPIR, family = binomial, data = data_fit)
+```
+
+```{r}
+library(broom)
+library(pscl) 
+
+# Design a function to extract the information from the regression model
+model_info <- function(model) {
+  
+  OR <- exp(coef(model)[2])  # odds ratios
+  n <- nobs(model) # sample size
+  AIC_value <- AIC(model) # AIC
+  pseudo_R2 <- pR2(model)["McFadden"]
+  
+  return(list(OR = OR, n = n, AIC = AIC_value, pseudo_R2 = pseudo_R2))
+}
+
+# Run the function
+mod1_info <- model_info(mod1)
+mod2_info <- model_info(mod2)
+mod3_info <- model_info(mod3)
+```
+
+```{r}
+# Make a dataframe to save the extracted information
+reg_results <- data.frame(
+  'Model'= c('mod1', 'mod2', 'mod3'),
+  'Odds Ratio' = c(mod1_info$OR, mod2_info$OR, mod3_info$OR),
+  'Sample Size' = c(mod1_info$n,mod2_info$n, mod3_info$n),
+  'AIC' = c(mod1_info$AIC,mod2_info$AIC, mod3_info$AIC),
+  'Pseudo_R2' = c(mod1_info$pseudo_R2,mod2_info$pseudo_R2, mod3_info$pseudo_R2)
+)
+
+# Make a nice table of the result
+kable(reg_results)
+```
+
+```{r}
+# Use mod3 to test whether the odds of men and women being wears of glasess/contact lenses for distance vision differs
+summary(mod3)
+```
+
+```{r}
+exp(coef(mod3)[3])
+```
+
+According to mod3, the *odds* of men and women being wears of glasess/contact lenses for distance vision differs at a 1% significance level, and the odds is greater for women.
+
+```{r}
+# Calculate the proportion of wearing glasses for different genders
+prop_results <- summarise(
+  group_by(data, RIAGENDR),
+  respondents_num = n(),
+  wear_glasses = sum(VIQ220 == 1, na.rm = TRUE), # not data$VIQ220 == 1
+  proportion = wear_glasses / respondents_num
+)
+kable(prop_results)
+```
+
+```{r}
+# Conduct the prop test
+test_2 <- prop.test(x = c(1181, 1584), n = c(3383, 3597))
+test_2
+```
+
+p-value \< 0.01, the *proportion* of wearers of glasses/contact lenses for distance vision differs at a 1% significance level between men and women, and the proportion is greater for women.
+
+## **Problem 2 - Sakila**
+
+```{r}
+library(RSQLite)
+library(DBI)
+
+# Import the SQLite database of the sakila data
+sakila <- dbConnect(RSQLite::SQLite(), "/Users/aa/Downloads/sakila_master.db")
+sakila
+```
+
+```{r}
+dbListTables(sakila)
+```
+
+```{r}
+# SQL query to extract movie titles and release years from the film table
+film_data <- dbGetQuery(sakila, "SELECT TITLE, RELEASE_YEAR FROM FILM")
+
+# Get the oldest movie
+earliest_year <- min(film_data$release_year)
+earliest_film_1 <- film_data[film_data$release_year == earliest_year,]
+head(earliest_film_1)
+```
+
+```{r}
+# SQL query to find the earliest movie
+earliest_film_2 <- dbGetQuery(sakila, "
+  SELECT TITLE, RELEASE_YEAR
+  FROM FILM
+  WHERE RELEASE_YEAR = (SELECT MIN(RELEASE_YEAR) FROM FILM)
+")
+
+# Print the result
+head(earliest_film_2)
+```
+
+```{r}
+print(nrow(earliest_film_1))
+print(nrow(earliest_film_2))
+```
+
+The oldest movie is from 2006, and the number of the movies is 1000.
+
+```{r}
+# SQL query to extract category data from the film_category and category table and merge them
+genre_data_1 <- dbGetQuery(sakila, "SELECT FILM_ID, CATEGORY_ID FROM FILM_CATEGORY")
+genre_data_2 <- dbGetQuery(sakila, "SELECT CATEGORY_ID, NAME FROM CATEGORY")
+genre_data <- merge(genre_data_1, genre_data_2, by = 'category_id')
+
+# Find the  movie with the least common genre
+genre_name <- table(genre_data$name)
+genre_name[genre_name == min(genre_name)]
+```
+
+```{r}
+# SQL query to find the  movie with the least common genre
+genre_data_3 <- dbGetQuery(sakila, "
+  SELECT  NAME, COUNT(NAME) AS genre_count
+  FROM FILM_CATEGORY AS f
+    INNER JOIN CATEGORY AS c ON f.category_id = c.category_id
+  GROUP BY NAME
+  ORDER BY genre_count ASC
+  LIMIT 1
+")
+
+genre_data_3
+```
+
+So the least number of genre is the Music category and there are 51 movies of this genre.
+
+```{r}
+# SQL query to extract customer, city, address, and country data
+customer_data <- dbGetQuery(sakila, "SELECT CUSTOMER_ID, ADDRESS_ID FROM CUSTOMER")
+address_data <- dbGetQuery(sakila, "SELECT ADDRESS_ID, CITY_ID FROM ADDRESS")
+city_data <- dbGetQuery(sakila, " SELECT CITY_ID, COUNTRY_ID FROM CITY")
+country_data <- dbGetQuery(sakila, " SELECT COUNTRY_ID, COUNTRY FROM COUNTRY")
+
+# Merge all tables together
+data_1 <- merge(customer_data, address_data, by = 'address_id', all = FALSE)
+data_2 <- merge(data_1, city_data, by = 'city_id', all = FALSE)
+data_3 <- merge(data_2, country_data, by = 'country_id', all = FALSE)
+
+# Get countries that have exactly 13 customers.
+country_count <- table(data_3$country)
+country_count[country_count == 13]
+```
+
+```{r}
+dbGetQuery(sakila,"
+  SELECT acoci.country, COUNT(c.customer_id) AS count
+    FROM customer AS c
+    RIGHT JOIN(
+    SELECT a.city_id, coci.country, a.address_id
+      FROM address AS a
+      RIGHT JOIN
+      (SELECT co.country,ci.city_id
+        FROM city AS ci
+        LEFT JOIN country AS co ON co.country_id = ci.country_id
+    ) AS coci ON coci.city_id = a.city_id
+    ) AS acoci ON acoci.address_id = c.address_id
+    GROUP BY country
+    HAVING count = 13
+  ")
+```
+
+The country with exactly 13 customers are Argentina and Nigeria.
+
+## **Problem 3 - US Records**
+
+```{r}
+
+US_data <- read.csv('/Users/aa/Desktop/Umich/Stats 506/us-500.csv')
+head(US_data)
+```
+
+```{r}
+# Calculate the proportion of TLD that contains ".com"
+contain_1 <- grepl("\\.com$", US_data$email) # attention \\.$
+prop_1 <- sum(contain_1 == TRUE)/length(US_data$email)
+prop_1
+```
+
+```{r}
+# Calculate the proportion of email addresses that have at least one non alphanumeric character
+contain_2 <- grepl("[^a-zA-Z0-9@.]", US_data$email)
+prop_2 <- sum(contain_2 == TRUE)/length(US_data$email)
+prop_2
+```
+
+```{r}
+# Extract the area codes for all phone numbers
+area_code <- substr(c(US_data$phone1, US_data$phone2), 1, 3)
+
+# Calculate the number of each area code and sort them to get the 5 most common codes
+area_code_num <- sort(table(area_code),decreasing = TRUE)[1:5]
+
+area_code_num
+```
+
+973, 212, 215, 410, 201 are the 5 most common area codes.
+
+```{r}
+library(ggplot2)
+# Set the pattern to extract corresponding address
+pattern <- "\\b([1-9][0-9]{0,3})$"
+address <- US_data$address[grepl(pattern, US_data$address)]
+
+# Extract the numbers and calculate their logs
+extracted_numbers <- as.numeric(regmatches(address, regexpr(pattern, address)))
+log_numbers <- log(extracted_numbers)
+
+
+# Produce a histogram 
+hist(log_numbers)
+```
+
+```{r}
+# Extract the leading digits
+leading_digits <- as.numeric(substring(as.character(extracted_numbers), 1, 1))
+
+# Plot the distribution of leading digits
+barplot(table(leading_digits),density =TRUE)
+```
+
+According to the plot, the distribution of leading digits is nearly normal, it doesn't obey the Benford's law
