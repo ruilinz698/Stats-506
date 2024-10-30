@@ -1,0 +1,210 @@
+---
+title: "Assignment 4"
+author: "Ruilin Zhang"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## **Problem 1 - Tidyverse**
+
+```{r}
+library(tidyverse)
+library("nycflights13")
+library(dplyr)
+head(flights)
+```
+
+```{r}
+head(airports)
+```
+
+```{r}
+# Geneate the departure delay data per airport tibble
+table_1 <- flights %>%
+  group_by(dest) %>%
+  filter(n() >= 10) %>%
+  ungroup() %>%
+  group_by(origin) %>%
+  summarise(mean_delay = mean(dep_delay,na.rm = TRUE), 
+         median_delay = median(dep_delay, na.rm = TRUE)) %>%
+  inner_join(airports, by = c("origin" = "faa")) %>%
+  select(name, mean_delay, median_delay) %>%
+  arrange(desc(median_delay))
+
+table_1
+```
+
+```{r}
+# Geneate the arrival delay data per airport tibble
+table_2 <- flights %>%
+  group_by(dest) %>%
+  filter(n() >= 10) %>%
+  summarise(mean_delay = mean(arr_delay,na.rm = TRUE), 
+         median_delay = median(arr_delay, na.rm = TRUE)) %>%
+  inner_join(airports, by = c("dest" = "faa")) %>%
+  select(name, mean_delay, median_delay) %>%
+  arrange(desc(median_delay))
+
+table_2
+```
+
+```{r}
+head(planes)
+```
+
+```{r}
+# Merge the plane and flight table
+merged <- flights %>%
+  inner_join(planes, by = "tailnum")
+# Generate the fastest aircraft model tibble
+table_3 <- merged %>%
+  mutate(speed = distance / (air_time / 60)) %>%
+  group_by(model) %>%
+  summarise(avg_speed = mean(speed, na.rm = TRUE),
+            n_flights = n()) %>%
+  arrange(desc(avg_speed)) %>%
+  slice(1) %>%
+  select(model, avg_speed, n_flights)
+
+table_3
+```
+
+```{r}
+
+```
+
+## **Problem 2 - `get_temp()`**
+
+```{r}
+nnmaps <- read.csv("/Users/aa/Downloads/chicago-nmmaps.csv")
+head(nnmaps)
+```
+
+```{r}
+get_temp <- function(month, year, data, celsius = FALSE, average_fn = mean){
+  if (is.character(month)){
+    # Convert month to a numeric number
+    month <- match(tolower(month), tolower(month.name)) 
+  } else if(!is.numeric(month) || month < 1 || month > 12){
+    # Give a reasonable error message for wrong month value
+    warning("Month should be a numeric value between 1 and 12.")
+    return(NA)
+  }
+    
+  # Give a reasonable error message for wrong year value
+  if (!is.numeric(year) || year < 1997 || year > 2000 ){
+    warning("Year should be a numeric value between 1997 and 2000.")
+    return(NA)
+  }
+  
+  # Get the data for corresponding time and get the output under average_fn
+  temperature <- data %>%
+    filter(month == month, year == year ) %>%
+    summarise(mean_temperature = average_fn(temp)) %>%
+    select(mean_temperature)
+    
+  temp = temperature$mean_temperature
+  
+  # When celsius is TRUE, convert the temperature to celsius
+  if (celsius == TRUE){
+    temp = (temp - 32)/1.8}
+  
+  return(temp)
+  
+}
+
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps)
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+get_temp(13, 1998, data = nnmaps)
+get_temp(2, 2005, data = nnmaps)
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+## **Problem 3 - Visualization**
+
+```{r}
+library(ggplot2)
+data <- read.csv("/Users/aa/Downloads/df_for_ml_improved_new_market.csv")
+head(data)
+```
+
+```{r}
+# Get the average price data for each year
+data_1 <- data %>%
+  group_by(year) %>%
+  summarize(mean_price_usd = mean(price_usd, na.rm = TRUE))
+
+# Plot the average data for each year
+ggplot(data_1, aes(x = year, y = mean_price_usd)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(
+    x = "Year",
+    y = "Average Sales Price (USD)"
+  ) 
+```
+
+a\. According to the line graph above, the average sales price(USD) changes greatly over time. It got larger from 1997 to 2008 and got smaller from 2008 to 2012.
+
+```{r}
+# Get the genre distribution data for each year
+data_2 <- data %>%
+  group_by(year) %>%
+  # Calculate the number of each genre each year
+  summarise(
+    photography = sum(Genre___Photography, na.rm = TRUE),
+    print = sum(Genre___Print, na.rm = TRUE),
+    sculpture = sum(Genre___Sculpture, na.rm = TRUE),
+    painting = sum(Genre___Painting, na.rm = TRUE),
+    others = sum(Genre___Others, na.rm = TRUE)
+     ) %>% 
+    # Convert data to long data
+    pivot_longer(cols = photography:others, names_to = "genre", values_to = "count")
+
+# Plot the distribution of genre
+ggplot(data_2, aes(x = year, y = count, fill = genre)) +
+geom_bar(stat = "identity", position = "fill") +
+labs( 
+  x = "Year",
+  y = "Distribution of Genre")
+```
+
+b\. The distribution of genre of sales across years appear to change. For instance, the proportion of painting and others have decreased and the proportion of sculpture fluctuates each year.
+
+```{r}
+data_3 <- data %>%
+  group_by(year) %>%
+  # Calculate the average price for each genre over time
+  summarise(
+    photography_price = mean(price_usd[Genre___Photography == 1], na.rm = TRUE),
+    print_price = mean(price_usd[Genre___Print == 1], na.rm = TRUE),
+    sculpture_price = mean(price_usd[Genre___Sculpture == 1], na.rm = TRUE),
+    painting_price = mean(price_usd[Genre___Painting == 1], na.rm = TRUE),
+    others_price = mean(price_usd[Genre___Others == 1], na.rm = TRUE)
+  ) %>% 
+  # Convert data to long data
+  pivot_longer(cols = photography_price:others_price, names_to = "genre", values_to = "avg_price") %>%
+  filter(!is.na(avg_price))
+
+# Plot the average price for each genre over time
+ggplot(data_3, aes(x = year, y = avg_price, color = genre)) +
+  geom_line() + 
+  geom_point() +
+  facet_wrap("genre") +
+  labs(
+    x = "Year",
+    y = "Average Sales Price (USD)"
+  ) 
+```
+
+According to the graph above, the genre affect the change in sales price. For instance, the price of photography is much more volatile and the price of sculpture is more stable.
