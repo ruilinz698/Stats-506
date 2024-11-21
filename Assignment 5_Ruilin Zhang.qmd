@@ -1,0 +1,310 @@
+---
+title: "Assignment 5"
+format: html
+editor: visual
+---
+
+## **Problem 1 - OOP Programming**
+
+```{r}
+library(Rcpp)
+```
+
+```{r}
+# Define a rational class
+setClass("rational",
+         slots = c(numerator = "numeric", denominator = "numeric"))
+
+# Define a constructor for rational
+rational <- function(numerator, denominator) {
+    new("rational", numerator = as.integer(numerator), denominator = as.integer(denominator))
+}
+
+# Validate the denominator is non-zero
+setValidity("rational", function(object) {
+    if (object@denominator == 0) {
+        return("The denominator must be non-zero.")
+    }
+    return(TRUE)
+})
+```
+
+```{r}
+# Set a show method
+setMethod("show", "rational", function(object) {
+  cat(object@numerator, "/", object@denominator, "\n")
+})
+
+# Set a simplify method
+setGeneric("simplify", function(object) standardGeneric("simplify"))
+
+setMethod("simplify", "rational",function(object){
+  divisor <- gcd(object@numerator, object@denominator)
+  object@numerator <- object@numerator / divisor
+  object@denominator <- object@denominator / divisor
+  return(object)
+})
+
+# Set a quotient method
+setGeneric("quotient", function(object, digits = 8) standardGeneric("quotient"))
+
+setMethod("quotient", "rational", function(object, digits = 8) {
+    if(!is.numeric(digits)) return("Digits must be numeric")
+    if(digits != round(digits)) return("Digits must be an integer")
+
+    result <- as.numeric(object@numerator) / as.numeric(object@denominator)
+    print(round(result, digits))
+    invisible(result)
+})
+```
+
+```{r}
+# Define C++ gcd and lcm functions
+cppFunction('
+int gcd(int x, int y) {
+    return std::gcd(x, y);
+}
+')
+
+cppFunction('
+int lcm(int x, int y) {
+    return std::abs(x * y) / std::gcd(x, y);
+}
+')
+
+# Set an addition method
+setMethod("+", signature(e1 = "rational", e2 = "rational"), 
+          function(e1, e2) {
+              denom <- lcm(e1@denominator, e2@denominator)
+              num <- (e1@numerator * (denom / e1@denominator)) + 
+                     (e2@numerator * (denom / e2@denominator))
+              simplify(new("rational", numerator = num, denominator = denom))
+})
+
+# Set a subtraction method
+setMethod("-", signature(e1 = "rational", e2 = "rational"), 
+          function(e1, e2) {
+              denom <- lcm(e1@denominator, e2@denominator)
+              num <- (e1@numerator * (denom / e1@denominator)) - 
+                     (e2@numerator * (denom / e2@denominator))
+              simplify(new("rational", numerator = num, denominator = denom))
+})
+
+# Set a multiplication method
+setMethod("*", signature(e1 = "rational", e2 = "rational"), 
+          function(e1, e2) {
+              num <- e1@numerator * e2@numerator
+              denom <- e1@denominator * e2@denominator
+              simplify(new("rational", numerator = num, denominator = denom))
+})
+
+# Set a division method
+setMethod("/", signature(e1 = "rational", e2 = "rational"), 
+          function(e1, e2) {
+              if(e2@numerator == 0) return("Denominator cannot be zero")
+              num <- e1@numerator * e2@denominator
+              denom <- e1@denominator * e2@numerator
+              simplify(new("rational", numerator = num, denominator = denom))
+})
+```
+
+```{r}
+r1 <- rational(24,6)
+r2 <- rational(7,230)
+r3 <- rational(0,4)
+```
+
+```{r}
+r1
+r3
+r1 + r2
+r1 - r2
+r1 * r2
+r1 / r2
+r1 + r3
+r1 * r3
+r2 / r3
+
+quotient(r1)
+quotient(r2)
+quotient(r2, digits = 3)
+quotient(r2, digits = 3.14)
+quotient(r2, digits = "avocado")
+q2 <- quotient(r2, digits = 3)
+q2
+quotient(r3)
+simplify(r1)
+simplify(r2)
+simplify(r3)
+```
+
+## **Problem 2 - plotly**
+
+```{r}
+library(plotly)
+library(ggplot2)
+library(tidyverse)
+data <- read.csv("/Users/aa/Downloads/df_for_ml_improved_new_market.csv")
+head(data)
+```
+
+```{r}
+# Get the average price data for each year
+data_1 <- data %>%
+  group_by(year) %>%
+  summarize(mean_price_usd = mean(price_usd, na.rm = TRUE))
+
+```
+
+```{r}
+# Plot the average data for each year
+plot_ly(data_1, x = ~year, y = ~mean_price_usd, type = 'scatter', mode = 'lines',line = list(color = "red")) %>%
+  layout(
+    title = "Average price over year",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Average Sales Price (USD)")
+  )
+```
+
+a\. According to the line graph above, the average sales price(USD) changes greatly over time. It got larger from 1997 to 2008 and got smaller from 2008 to 2012.
+
+```{r}
+# Get the genre distribution data for each year
+data_2 <- data %>%
+  group_by(year) %>%
+  # Calculate the number of each genre each year
+  summarise(
+    photography = sum(Genre___Photography, na.rm = TRUE),
+    print = sum(Genre___Print, na.rm = TRUE),
+    sculpture = sum(Genre___Sculpture, na.rm = TRUE),
+    painting = sum(Genre___Painting, na.rm = TRUE),
+    others = sum(Genre___Others, na.rm = TRUE)
+     ) %>% 
+    # Convert data to long data
+    pivot_longer(cols = photography:others, names_to = "genre", values_to = "count")%>%
+    # Calculate the proportion for each genre
+    group_by(year) %>%
+    mutate(percent = count / sum(count)) %>%
+    ungroup()
+
+# Plot the distribution of genre
+plot_ly(data_2, x = ~year, y = ~percent, color = ~genre, type = 'bar') %>%
+  layout(
+    barmode = 'stack',
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Distribution of Genre", tickformat = "%")
+  )
+```
+
+b\. The distribution of genre of sales across years appear to change. For instance, the proportion of painting and others have decreased and the proportion of sculpture fluctuates each year
+
+```{r}
+data_3 <- data %>%
+  group_by(year) %>%
+  # Calculate the average price for each genre over time
+  summarise(
+    photography_price = mean(price_usd[Genre___Photography == 1], na.rm = TRUE),
+    print_price = mean(price_usd[Genre___Print == 1], na.rm = TRUE),
+    sculpture_price = mean(price_usd[Genre___Sculpture == 1], na.rm = TRUE),
+    painting_price = mean(price_usd[Genre___Painting == 1], na.rm = TRUE),
+    others_price = mean(price_usd[Genre___Others == 1], na.rm = TRUE)
+  ) %>% 
+  # Convert data to long data
+  pivot_longer(cols = photography_price:others_price, names_to = "genre", values_to = "avg_price") %>%
+  filter(!is.na(avg_price))
+
+# Plot the average price for each genre over time
+plots <- data_3 %>%
+  split(.$genre) %>%
+  lapply(function(df) {
+    plot_ly(df, x = ~year, y = ~avg_price, type = 'scatter', mode = 'lines',
+            name = unique(df$genre)) %>%
+      layout(
+        xaxis = list(title = "Year"),
+        yaxis = list(title = "Average Sales Price (USD)")
+      )
+  })
+subplot(plots, nrows = 5)
+```
+
+According to the graph above, the genre affect the change in sales price. For instance, the price of photography is much more volatile and the price of sculpture is more stable.
+
+## **Problem 3 - data.table**
+
+```{r}
+library("nycflights13")
+library(data.table)
+library(dplyr)
+```
+
+```{r}
+head(flights)
+```
+
+```{r}
+head(airports)
+```
+
+```{r}
+# Convert flights and airports to data.tables
+flights <- as.data.table(flights)
+airports <- as.data.table(airports)
+planes <- as.data.table(planes)
+```
+
+```{r}
+# Geneate the departure delay data per airport data.tables
+table_1 <- flights[, .(mean_delay = mean(dep_delay, na.rm = TRUE),
+            med_delay = median(dep_delay, na.rm = TRUE),
+            numflights = .N), by = origin][
+              numflights >= 10
+            ][
+              ,faa := origin
+            ][
+              airports, ,on = "faa", nomatch = NULL
+            ][
+              order(-mean_delay)
+            ][
+              , .(name, mean_delay, med_delay)
+            ]  
+       
+
+table_1
+```
+
+```{r}
+# Geneate the arrival delay data per airport data.tables
+table_2 <- flights[, .(mean_delay = mean(dep_delay, na.rm = TRUE),
+            med_delay = median(dep_delay, na.rm = TRUE),
+            numflights = .N), by = dest][
+              numflights >= 10
+            ][
+              ,faa := dest
+            ][
+              airports, ,on = "faa", nomatch = NULL
+            ][
+              order(-mean_delay)
+            ][
+              , .(name, mean_delay, med_delay)
+            ]  
+       
+
+table_2
+```
+
+```{r}
+# Generate the fastest aircraft model data.table
+table_3 <- flights[
+   planes, ,on = "tailnum", nomatch = NULL
+][, `:=`(time = air_time/60,
+      mph = distance/(air_time/60))
+][, .(avgmph = mean(mph, na.rm = TRUE),
+      nfights = .N), by = model
+][
+  order(-avgmph)
+][
+  1
+]
+
+table_3
+```
