@@ -1,0 +1,128 @@
+---
+title: "Project code"
+format: html
+editor: visual
+---
+
+```{r}
+library(data.table)
+library(dplyr)
+library(purrr)
+library(tidyr)
+
+df1 <- fread("/Users/aa/Desktop/未命名文件夹/Medicare_Physician_Other_Practitioners_by_Provider_2020.csv")
+df2 <-fread("/Users/aa/Desktop/未命名文件夹/20zpallagi.csv")
+df1 <- na.omit(df1)
+df2 <- na.omit(df2)
+```
+
+```{r}
+df3 <- df1[,c("Rndrng_Prvdr_State_Abrvtn",
+              "Tot_Sbmtd_Chrg",
+              "Tot_Mdcr_Pymt_Amt",
+              "Drug_Mdcr_Pymt_Amt",
+              "Med_Mdcr_Pymt_Amt",
+              "Bene_Avg_Age",
+              "Bene_Age_LT_65_Cnt",
+              "Tot_Benes",
+              "Bene_Male_Cnt")]
+
+colnames(df3)[1] <- "STATE"
+
+df4 <- df2[,c("STATE","A02650","A18300","agi_stub","A07100")]
+colnames(df4) <-c("STATE", "Tot_Income", "Tot_Taxes","Income_Level","Tot_Taxes_Cr")
+
+head(df3)
+```
+
+```{r}
+head(df4)
+```
+
+```{r}
+df3 <- aggregate(. ~ STATE, data = df3, FUN = mean)
+df4 <- aggregate(. ~ STATE, data = df4, FUN = mean)
+df3
+```
+
+```{r}
+merged_df <- merge(df3, df4, by = "STATE") 
+
+merged_df <- merged_df %>%
+  mutate(Tax_Ratio = Tot_Taxes / Tot_Income,
+         Credit_Ratio = Tot_Taxes_Cr / Tot_Taxes,
+         Med_Ratio = Med_Mdcr_Pymt_Amt / Tot_Sbmtd_Chrg,
+         Drug_Ratio = Drug_Mdcr_Pymt_Amt / Tot_Sbmtd_Chrg,
+         Mdcr_Ratio = Tot_Mdcr_Pymt_Amt / Tot_Sbmtd_Chrg,
+         Elder_Ratio = 1 - Bene_Age_LT_65_Cnt / Tot_Benes,
+         Male_Ratio = Bene_Male_Cnt / Tot_Benes
+         )
+
+merged_df
+```
+
+```{r}
+model_1 <- lm(Med_Ratio ~ Tax_Ratio + Income_Level + Credit_Ratio + Elder_Ratio + Male_Ratio , data = merged_df)
+summary(model_1)
+```
+
+```{r}
+model_2 <- lm(Drug_Ratio ~ Tax_Ratio + Income_Level + Credit_Ratio + Elder_Ratio + Male_Ratio , data = merged_df)
+summary(model_2)
+```
+
+```{r}
+model_3 <- lm(Mdcr_Ratio ~ Tax_Ratio + Income_Level + Credit_Ratio + Elder_Ratio + Male_Ratio , data = merged_df)
+summary(model_3)
+```
+
+```{r}
+long_data <- merged_df %>%
+  select(STATE, Tax_Ratio, Mdcr_Ratio, Med_Ratio, Drug_Ratio) %>%
+  pivot_longer(cols = c("Mdcr_Ratio", "Med_Ratio", "Drug_Ratio"),
+               names_to = "Type", 
+               values_to = "Value")
+
+p1 <- ggplot(long_data, aes(x = Tax_Ratio, y = Value, color = Type)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~Type, scales = "free_y") +
+  theme_minimal() +
+  labs(x = "Tax Ratio",
+       y = "Payment Ratio")
+
+
+ggsave("/Users/aa/Desktop/Types_of_Medicare_Payments.png", plot = p1, width = 10, height = 6, dpi = 300)
+```
+
+```{r}
+merged_df$Tax_Group <- cut(merged_df$Tax_Ratio, 
+                               breaks = quantile(merged_df$Tax_Ratio, probs = seq(0, 1, 1/3)),
+                               labels = c("Low", "Medium", "High"))
+
+
+
+group_models <- merged_df %>%
+  group_by(Tax_Group) %>%
+  summarise(
+    model = list(lm(Mdcr_Ratio ~ Tax_Ratio + Income_Level + Credit_Ratio + Elder_Ratio + Male_Ratio, data = cur_data()))
+  )
+
+
+group_models %>%
+  mutate(model_summary = map(model, summary)) %>%
+  pull(model_summary)
+
+
+```
+
+```{r}
+p2 <- ggplot(merged_df, aes(x = Tax_Group, y = Mdcr_Ratio, fill = Tax_Group)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(x = "Tax Group",
+       y = "Total Medicare Payment Ratio (Mdcr_Ratio)")
+
+
+ggsave("/Users/aa/Desktop/Distribution_by_Tax_Group.png", plot = p2, width = 8, height = 6)
+```
